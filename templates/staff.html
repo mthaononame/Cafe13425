@@ -1,0 +1,64 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h2 class="text-primary fw-bold">🖥️ MÀN HÌNH NHÂN VIÊN</h2>
+<div class="card shadow">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr><th>Giờ</th><th>Khách</th><th>Món</th><th>Tiền</th><th>TT</th><th>Xử lý</th></tr>
+            </thead>
+            <tbody id="order-table">
+                {% for order in orders %}
+                <tr id="order-{{ order.id }}">
+                    <td>{{ order.created_at.strftime("%H:%M") }}</td>
+                    <td>{{ order.customer_name }}</td>
+                    <td>{{ order.details }}</td>
+                    <td class="fw-bold text-danger">{{ "{:,.0f}".format(order.total_amount) }} đ</td>
+                    <td id="status-{{ order.id }}">
+                        {% if order.status == 'Pending' %} <span class="badge bg-warning text-dark">Chờ</span>
+                        {% elif order.status == 'Paying' %} <span class="badge bg-info">QR</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary fw-bold" onclick="reqPay({{ order.id }})">Xuất Bill</button>
+                        <button class="btn btn-sm btn-success fw-bold" onclick="confPay({{ order.id }})">Đã Thu</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    var socket = io({transports: ['websocket', 'polling']});
+
+    socket.on('update_staff_orders', function(data) {
+        let row = `
+            <tr id="order-${data.id}" class="table-warning">
+                <td>${data.time}</td><td>${data.customer}</td><td>${data.details}</td>
+                <td class="fw-bold text-danger">${parseInt(data.total).toLocaleString()} đ</td>
+                <td id="status-${data.id}"><span class="badge bg-warning text-dark">Chờ</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary fw-bold" onclick="reqPay(${data.id})">Xuất Bill</button>
+                    <button class="btn btn-sm btn-success fw-bold" onclick="confPay(${data.id})">Đã Thu</button>
+                </td>
+            </tr>`;
+        document.getElementById('order-table').insertAdjacentHTML('afterbegin', row);
+    });
+
+    function reqPay(id) {
+        showConfirm("Xuất mã QR cho khách?", function() {
+            socket.emit('staff_request_payment', { order_id: id });
+            document.getElementById(`status-${id}`).innerHTML = '<span class="badge bg-info">QR</span>';
+        });
+    }
+
+    function confPay(id) {
+        showConfirm("Xác nhận đã nhận tiền?", function() {
+            socket.emit('staff_confirm_payment', { order_id: id });
+            document.getElementById(`order-${id}`).remove();
+        });
+    }
+</script>
+{% endblock %}

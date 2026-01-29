@@ -1,0 +1,94 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h3 class="fw-bold text-primary mb-3">☕ MENU ĐỒ UỐNG</h3>
+        <div class="row g-3">
+            {% for p in products %}
+            <div class="col-6 col-md-4">
+                <div class="card h-100 shadow-sm" onclick="addToCart('{{ p.name }}', {{ p.price }})" style="cursor: pointer;">
+                    <img src="{{ p.image }}" class="card-img-top" style="height:150px; object-fit:contain;" onerror="this.src='https://via.placeholder.com/150'">
+                    <div class="card-body text-center p-2">
+                        <h6 class="fw-bold">{{ p.name }}</h6>
+                        <div class="text-danger fw-bold">{{ "{:,.0f}".format(p.price) }} đ</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow mb-3" id="cart-view">
+            <div class="card-header bg-primary text-white fw-bold">🛒 GIỎ HÀNG</div>
+            <div class="card-body">
+                <ul id="cart-list" class="list-group mb-3"></ul>
+                <h4 class="text-danger fw-bold text-end" id="total-price">0 đ</h4>
+                <button class="btn btn-success w-100 fw-bold" onclick="submitOrder()">GỌI MÓN</button>
+            </div>
+        </div>
+        
+        <div class="card shadow border-danger" id="qr-view" style="display: none;">
+            <div class="card-header bg-danger text-white fw-bold text-center">THANH TOÁN QR</div>
+            <div class="card-body text-center">
+                <img id="qr-image" src="" class="img-fluid mb-2" style="max-width: 200px;">
+                <h3 id="pay-total" class="text-danger fw-bold"></h3>
+                <p class="text-muted">Đang chờ nhân viên xác nhận...</p>
+                <button class="btn btn-secondary btn-sm" onclick="location.reload()">Quay lại</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // KẾT NỐI SOCKET
+    var socket = io({transports: ['websocket', 'polling']});
+    let cart = [];
+
+    function addToCart(name, price) {
+        let item = cart.find(i => i.name === name);
+        if (item) item.qty++;
+        else cart.push({name, price, qty: 1});
+        renderCart();
+    }
+
+    function renderCart() {
+        let list = document.getElementById('cart-list');
+        list.innerHTML = cart.map(i => `
+            <li class="list-group-item d-flex justify-content-between">
+                <span>${i.name} (x${i.qty})</span>
+                <b>${(i.price*i.qty).toLocaleString()}đ</b>
+            </li>`).join('');
+        
+        let total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+        document.getElementById('total-price').innerText = total.toLocaleString() + " đ";
+    }
+
+    function submitOrder() {
+        if (!cart.length) return showNotify("Giỏ hàng trống!");
+        let total = parseInt(document.getElementById('total-price').innerText.replace(/\D/g,''));
+        let details = cart.map(i => `${i.name} x${i.qty}`).join(", ");
+        
+        socket.emit('new_order_request', {
+            customer_name: "{{ current_user.full_name }}",
+            details: details,
+            total: total
+        });
+        showNotify("Đã gửi đơn! Vui lòng đợi.");
+    }
+
+    socket.on('show_customer_qr', function(data) {
+        document.getElementById('cart-view').style.display = 'none';
+        document.getElementById('qr-view').style.display = 'block';
+        
+        let url = `https://img.vietqr.io/image/MB-0588293418-compact2.png?amount=${data.total}&addInfo=ThanhToan`;
+        document.getElementById('qr-image').src = url;
+        document.getElementById('pay-total').innerText = parseInt(data.total).toLocaleString() + " đ";
+    });
+
+    socket.on('payment_success', function() {
+        showNotify("Thanh toán thành công!");
+        setTimeout(() => location.reload(), 2000);
+    });
+</script>
+{% endblock %}

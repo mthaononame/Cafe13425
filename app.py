@@ -1,0 +1,190 @@
+﻿import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_socketio import SocketIO, emit
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from datetime import datetime, timedelta
+
+# --- CẤU HÌNH ---
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'khoa_bi_mat'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cafe_v2.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+UPLOAD_FOLDER = os.path.join(basedir, 'static', 'img')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER)
+
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# --- SOCKET IO (Quan trọng: cors_allowed_origins) ---
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
+# --- MODELS ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    full_name = db.Column(db.String(100))
+    orders_processed = db.relationship('Order', backref='processor', lazy=True)
+
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    image = db.Column(db.String(200)) 
+    category = db.Column(db.String(50))
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(100), default="Khách")
+    total_amount = db.Column(db.Float, default=0)
+    status = db.Column(db.String(50), default='Pending') 
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    details = db.Column(db.String(500))
+    staff_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# --- ROUTES ---
+@app.route('/')
+def index():
+    if not current_user.is_authenticated: return redirect(url_for('login'))
+    if current_user.role == 'manager': return redirect(url_for('manager_dashboard'))
+    elif current_user.role == 'staff': return redirect(url_for('staff_dashboard'))
+    else: return redirect(url_for('customer_dashboard'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user, remember=False)
+            return redirect(url_for('index'))
+        else: flash('Sai thông tin!', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/customer')
+@login_required
+def customer_dashboard():
+    products = Product.query.all()
+    return render_template('customer.html', products=products)
+
+@app.route('/staff')
+@login_required
+def staff_dashboard():
+    orders = Order.query.filter(Order.status != 'Completed').order_by(Order.created_at.desc()).all()
+    return render_template('staff.html', orders=orders)
+
+@app.route('/manager', methods=['GET', 'POST'])
+@login_required
+def manager_dashboard():
+    if current_user.role != 'manager': return "Không có quyền"
+    
+    # 1. Xóa sản phẩm
+    if 'delete_product' in request.form:
+        p_id = request.form.get('product_id')
+        product = Product.query.get(p_id)
+        if product:
+            db.session.delete(product)
+            db.session.commit()
+            flash('Đã xóa món!', 'success')
+        return redirect(url_for('manager_dashboard'))
+
+    # 2. Thêm sản phẩm
+    if 'add_product' in request.form:
+        name = request.form['name']
+        price = float(request.form['price'])
+        category = request.form['category']
+        image_path = ""
+        if 'image' in request.files:
+            file = request.files['image']
+            if file.filename != '':
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                image_path = f"/static/img/{filename}"
+
+        db.session.add(Product(name=name, price=price, category=category, image=image_path))
+        db.session.commit()
+        return redirect(url_for('manager_dashboard'))
+    
+    # 3. Tạo Staff
+    if 'create_staff' in request.form:
+         db.session.add(User(
+            username=request.form['username'],
+            password=generate_password_hash(request.form['password']),
+            full_name=request.form['full_name'],
+            role='staff'
+        ))
+         db.session.commit()
+         flash('Tạo nhân viên thành công', 'success')
+
+    products = Product.query.all()
+    categories = sorted(list(set([p.category for p in products if p.category])))
+    staffs = User.query.filter_by(role='staff').all()
+    staff_stats = [{'name': s.full_name, 'revenue': sum(o.total_amount for o in s.orders_processed if o.status=='Completed')} for s in staffs]
+    total_rev = sum(s['revenue'] for s in staff_stats)
+
+    return render_template('manager.html', products=products, staff_stats=staff_stats, total_revenue=total_rev, categories=categories)
+
+# --- SOCKET EVENTS ---
+@socketio.on('new_order_request')
+def handle_new_order(data):
+    new_order = Order(customer_name=data['customer_name'], total_amount=data['total'], details=data['details'], status='Pending')
+    db.session.add(new_order)
+    db.session.commit()
+    emit('update_staff_orders', {
+        'id': new_order.id, 'customer': new_order.customer_name, 
+        'details': new_order.details, 'total': new_order.total_amount, 
+        'time': new_order.created_at.strftime("%H:%M")
+    }, broadcast=True)
+
+@socketio.on('staff_request_payment')
+def handle_payment_request(data):
+    order = Order.query.get(data['order_id'])
+    if order:
+        order.status = 'Paying'
+        db.session.commit()
+        emit('show_customer_qr', {'total': order.total_amount, 'details': order.details}, broadcast=True)
+
+@socketio.on('staff_confirm_payment')
+def handle_confirm_payment(data):
+    order = Order.query.get(data['order_id'])
+    if order:
+        order.status = 'Completed'
+        order.staff_id = current_user.id 
+        db.session.commit()
+        emit('update_manager_stats', {'amount': order.total_amount}, broadcast=True)
+        emit('payment_success', {}, broadcast=True)
+
+# --- KHỞI CHẠY ---
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        if not User.query.filter_by(username='admin').first():
+            db.session.add(User(username='admin', password=generate_password_hash('123'), role='manager', full_name='Chủ Quán'))
+            db.session.add(User(username='staff', password=generate_password_hash('123'), role='staff', full_name='Nhân viên A'))
+            db.session.add(User(username='guest', password=generate_password_hash('123'), role='customer', full_name='Khách hàng'))
+            db.session.commit()
+    
+    port = int(os.environ.get("PORT", 5001))
+    print(f"--- SERVER ĐANG CHẠY TẠI: http://127.0.0.1:{port} ---")
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

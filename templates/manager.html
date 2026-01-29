@@ -1,0 +1,187 @@
+﻿{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-danger fw-bold m-0">🛠️ QUẢN LÝ CỬA HÀNG</h2>
+    <div>
+        <button class="btn btn-outline-primary fw-bold me-2" data-bs-toggle="modal" data-bs-target="#staffModal">
+            👥 Quản lý Nhân viên
+        </button>
+        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#revenueModal">
+            💰 Xem Doanh thu
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow border-primary">
+            <div class="card-header bg-primary text-white fw-bold">➕ THÊM MÓN MỚI</div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="add_product" value="1">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tên món:</label>
+                        <input type="text" name="name" class="form-control" required placeholder="Ví dụ: Sinh tố bơ">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Giá bán (VNĐ):</label>
+                        <input type="number" name="price" class="form-control" required placeholder="30000">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Phân loại:</label>
+                        <input class="form-control" list="categoryOptions" name="category" placeholder="Nhập loại mới..." required>
+                        <datalist id="categoryOptions">
+                            {% for cat in categories %}
+                                <option value="{{ cat }}">
+                            {% endfor %}
+                            <option value="Cafe">
+                            <option value="Tra">
+                            <option value="Banh">
+                        </datalist>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Hình ảnh:</label>
+                        <input type="file" name="image" class="form-control" accept="image/*">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">LƯU SẢN PHẨM</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header fw-bold bg-light">📋 DANH SÁCH MENU HIỆN TẠI</div>
+            <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-hover table-striped m-0 align-middle">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th>Hình</th>
+                            <th>Tên món</th>
+                            <th>Giá bán</th>
+                            <th>Loại</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in products %}
+                        <tr>
+                            <td style="width: 80px;">
+                                <img src="{{ p.image }}" class="rounded" style="width: 50px; height: 50px; object-fit: cover;" 
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/50?text=IMG';">
+                            </td>
+                            <td class="fw-bold">{{ p.name }}</td>
+                            <td class="text-danger">{{ "{:,.0f}".format(p.price) }} đ</td>
+                            <td><span class="badge bg-info text-dark">{{ p.category }}</span></td>
+                            <td>
+                                <form id="delete-form-{{ p.id }}" method="POST" style="display: none;">
+                                    <input type="hidden" name="delete_product" value="1">
+                                    <input type="hidden" name="product_id" value="{{ p.id }}">
+                                </form>
+                                <button class="btn btn-sm btn-outline-danger fw-bold" onclick="confirmDelete('{{ p.name }}', {{ p.id }})">Xóa</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="staffModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold">👥 Tạo Tài Khoản Nhân Viên</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST">
+                    <input type="hidden" name="create_staff" value="1">
+                    <div class="mb-2">
+                        <label>Họ và tên nhân viên</label>
+                        <input type="text" name="full_name" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label>Tên đăng nhập (Username)</label>
+                        <input type="text" name="username" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label>Mật khẩu</label>
+                        <input type="text" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 mt-3">Tạo Tài Khoản</button>
+                </form>
+                <hr>
+                <h6>Danh sách nhân viên hiện có:</h6>
+                <ul>
+                    {% for staff in staff_stats %}
+                    <li>{{ staff.name }} (Doanh thu: {{ "{:,.0f}".format(staff.revenue) }} đ)</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="revenueModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold">💰 Báo Cáo Doanh Thu</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row text-center mb-4">
+                    <div class="col-12">
+                        <div class="p-4 bg-light border rounded">
+                            <h4 class="text-muted">Tổng Doanh Thu Thực Tế</h4>
+                            <h1 class="text-success fw-bold display-4" id="modal-revenue">{{ "{:,.0f}".format(total_revenue) }} đ</h1>
+                        </div>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Chi tiết theo nhân viên thu ngân:</h6>
+                <table class="table table-bordered">
+                    <thead><tr><th>Nhân viên</th><th>Doanh số</th></tr></thead>
+                    <tbody>
+                        {% for staff in staff_stats %}
+                        <tr>
+                            <td>{{ staff.name }}</td>
+                            <td class="text-end fw-bold">{{ "{:,.0f}".format(staff.revenue) }} đ</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    var socket = io();
+    socket.on('update_manager_stats', function(data) {
+        let current = parseInt(document.getElementById('modal-revenue').innerText.replace(/\D/g,''));
+        let newTotal = current + data.amount;
+        document.getElementById('modal-revenue').innerText = newTotal.toLocaleString() + " đ";
+    });
+
+    // Hàm gọi Modal Xác nhận Xóa
+    function confirmDelete(name, id) {
+        showConfirm("Bạn có chắc chắn muốn xóa món '" + name + "' không?", function() {
+            document.getElementById('delete-form-' + id).submit();
+        });
+    }
+</script>
+
+{% endblock %}

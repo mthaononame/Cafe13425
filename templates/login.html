@@ -1,0 +1,28 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h4>ĐĂNG NHẬP</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label>Tài khoản</label>
+                        <input type="text" name="username" class="form-control" required placeholder="admin / staff / guest">
+                    </div>
+                    <div class="mb-3">
+                        <label>Mật khẩu</label>
+                        <input type="password" name="password" class="form-control" required placeholder="123">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Vào Hệ Thống</button>
+                </form>
+                <div class="mt-3 text-center small text-muted">
+                    <p>Tài khoản mẫu:<br>Admin: admin/123 | Staff: staff/123 | Khách: guest/123</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
