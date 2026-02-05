@@ -20,46 +20,35 @@
             <div class="row">
                 <div class="col-md-4">
                     <div class="card shadow mb-3 border-0">
-                        <div class="card-header bg-success text-white fw-bold"><i class="fas fa-plus-circle"></i> THÊM MÓN MỚI</div>
+                        <div class="card-header bg-success text-white fw-bold" id="form-header"><i class="fas fa-plus-circle"></i> Thêm Món Mới</div>
                         <div class="card-body">
-                            <form method="POST" enctype="multipart/form-data">
-                                <input type="hidden" name="save_product" value="1">
-                                <div class="mb-2"><label class="fw-bold">Tên món:</label><input type="text" name="name" class="form-control" required placeholder="VD: Trà Đào"></div>
-                                <div class="mb-2"><label class="fw-bold">Danh mục:</label><select name="category" class="form-select"><option value="Cafe">Cafe</option><option value="Trà">Trà / Trà Sữa</option><option value="Bánh">Bánh Ngọt</option><option value="Khác">Khác</option></select></div>
-                                <div class="row"><div class="col-6 mb-2"><label class="fw-bold">Giá:</label><input type="number" name="price" class="form-control" required></div><div class="col-6 mb-2"><label class="fw-bold">Kho:</label><input type="number" name="stock" class="form-control" value="100"></div></div>
-                                <div class="mb-2 form-check bg-light p-2 rounded"><input type="checkbox" class="form-check-input" name="is_active" checked><label class="form-check-label fw-bold text-success">Đang kinh doanh</label></div>
-                                <div class="mb-3"><label class="fw-bold">Ảnh:</label><input type="text" name="image_url" class="form-control mb-1" placeholder="Link ảnh..."><input type="file" name="image_file" class="form-control"></div>
-                                <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm"><i class="fas fa-save"></i> THÊM NGAY</button>
+                            <form method="POST" enctype="multipart/form-data" id="product-form">
+                                <input type="hidden" name="save_product" value="1"><input type="hidden" name="product_id" id="inp-pid">
+                                <div class="mb-2"><label class="fw-bold">Tên món:</label><input type="text" name="name" id="inp-name" class="form-control" required></div>
+                                <div class="mb-2"><label class="fw-bold">Danh mục:</label><select name="category" id="inp-cat" class="form-select"><option value="Cafe">Cafe</option><option value="Trà">Trà / Trà Sữa</option><option value="Bánh">Bánh Ngọt</option><option value="Khác">Khác</option></select></div>
+                                <div class="row"><div class="col-6 mb-2"><label class="fw-bold">Giá:</label><input type="number" name="price" id="inp-price" class="form-control" required></div><div class="col-6 mb-2"><label class="fw-bold">Kho:</label><input type="number" name="stock" id="inp-stock" class="form-control" value="100"></div></div>
+                                <div class="mb-2 form-check bg-light p-2 rounded"><input type="checkbox" class="form-check-input" name="is_active" id="inp-active" checked><label class="form-check-label fw-bold text-success">Đang kinh doanh</label></div>
+                                <div class="mb-3"><label class="fw-bold">Ảnh:</label><div class="nav nav-tabs mb-2" id="imgTab"><button class="nav-link active py-1" data-bs-toggle="tab" data-bs-target="#tab-file" type="button">Upload</button><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#tab-link" type="button">Link</button></div><div class="tab-content"><div class="tab-pane fade show active" id="tab-file"><input type="file" name="image_file" class="form-control" accept="image/*"></div><div class="tab-pane fade" id="tab-link"><input type="text" name="image_url" id="inp-img" class="form-control" placeholder="https://..."></div></div></div>
+                                <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm" id="btn-save"><i class="fas fa-save"></i> LƯU MÓN</button>
+                                <button type="button" class="btn btn-secondary w-100 mt-2" onclick="resetForm()" id="btn-cancel" style="display:none;">Hủy Sửa</button>
                             </form>
                         </div>
                     </div>
                 </div>
-
                 <div class="col-md-8">
                     <div class="card shadow border-0">
-                        <div class="card-body p-0 table-responsive" style="max-height: 600px;">
+                        <div class="card-body p-0 table-responsive" style="max-height: 500px;">
                             <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light sticky-top"><tr><th>Ảnh</th><th>Tên</th><th>Giá</th><th>Kho</th><th>Hành động</th></tr></thead>
+                                <thead class="table-light sticky-top"><tr><th>Ảnh</th><th>Tên</th><th>Giá</th><th>TT</th><th>Xử lý</th></tr></thead>
                                 <tbody>
                                     {% for p in products %}
                                     <tr class="{{ 'table-secondary' if not p.is_active }}">
                                         <td><img src="{{ p.image }}" width="50" height="50" class="rounded shadow-sm" style="object-fit: cover;" onerror="this.src='https://via.placeholder.com/50'"></td>
-                                        <td class="fw-bold">{{ p.name }}</td>
-                                        <td class="text-danger fw-bold">{{ "{:,.0f}".format(p.price) }}</td>
-                                        <td>{{ p.inventory.stock_quantity }}</td>
+                                        <td class="fw-bold">{{ p.name }}</td><td class="text-danger fw-bold">{{ "{:,.0f}".format(p.price) }}</td>
+                                        <td>{% if p.is_active %}<span class="badge bg-success">Bán</span>{% else %}<span class="badge bg-secondary">Ngừng</span>{% endif %}</td>
                                         <td>
-                                            <button class="btn btn-sm btn-primary edit-btn shadow-sm" 
-                                                data-id="{{ p.id }}" data-name="{{ p.name }}" 
-                                                data-price="{{ p.price }}" data-stock="{{ p.inventory.stock_quantity }}" 
-                                                data-cat="{{ p.category }}" data-img="{{ p.image }}" 
-                                                data-active="{{ 'true' if p.is_active else 'false' }}">
-                                                <i class="fas fa-pen"></i> Sửa
-                                            </button>
-                                            
-                                            <button class="btn btn-sm btn-outline-danger delete-btn shadow-sm" 
-                                                data-id="{{ p.id }}" data-name="{{ p.name }}">
-                                                <i class="fas fa-trash"></i> Xóa
-                                            </button>
+                                            <button class="btn btn-sm btn-primary edit-btn" data-id="{{ p.id }}" data-name="{{ p.name }}" data-price="{{ p.price }}" data-stock="{{ p.inventory.stock_quantity }}" data-cat="{{ p.category }}" data-img="{{ p.image }}" data-active="{{ 'true' if p.is_active else 'false' }}"><i class="fas fa-edit"></i></button>
+                                            <form method="POST" class="d-inline" onsubmit="return confirm('Xóa vĩnh viễn?');"><input type="hidden" name="delete_product" value="1"><input type="hidden" name="product_id" value="{{ p.id }}"><button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button></form>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -72,78 +61,113 @@
         </div>
 
         <div class="tab-pane fade {{ 'show active' if active_tab == 'employees' else '' }}" id="tab-employees">
-            <div class="row"><div class="col-md-4"><div class="card shadow mb-3 border-0"><div class="card-header bg-info text-white fw-bold" id="emp-header"><i class="fas fa-user-plus"></i> Thêm Nhân Viên</div><div class="card-body"><form method="POST" id="emp-form"><input type="hidden" name="save_employee" value="1"><input type="hidden" name="user_id" id="emp-id"><div class="mb-2"><label class="fw-bold">Tên đăng nhập:</label><input type="text" name="username" id="emp-user" class="form-control" required></div><div class="mb-2"><label class="fw-bold">Mật khẩu:</label><input type="password" name="password" id="emp-pass" class="form-control" required placeholder="Bắt buộc nhập khi tạo mới"></div><div class="mb-3"><label class="fw-bold">Họ và Tên:</label><input type="text" name="fullname" id="emp-name" class="form-control" required></div><button type="submit" class="btn btn-info w-100 text-white fw-bold" id="emp-save">LƯU NHÂN VIÊN</button><button type="button" class="btn btn-secondary w-100 mt-2" onclick="resetEmpForm()" id="emp-cancel" style="display:none;">Hủy Sửa / Thêm Mới</button></form></div></div></div><div class="col-md-8"><div class="card shadow border-0"><div class="card-body p-0"><table class="table table-bordered mb-0"><thead class="table-light"><tr><th>Username</th><th>Họ tên</th><th>Hành động</th></tr></thead><tbody>{% for e in employees %}<tr><td>{{ e.username }}</td><td>{{ e.full_name }}</td><td><button class="btn btn-sm btn-primary edit-emp-btn" data-id="{{ e.id }}" data-user="{{ e.username }}" data-name="{{ e.full_name }}"><i class="fas fa-edit"></i></button><form method="POST" class="d-inline" onsubmit="return confirm('Xóa nhân viên này?');"><input type="hidden" name="delete_employee" value="1"><input type="hidden" name="user_id" value="{{ e.id }}"><button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button></form></td></tr>{% endfor %}</tbody></table></div></div></div></div>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card shadow mb-3 border-0">
+                        <div class="card-header bg-info text-white fw-bold" id="emp-header"><i class="fas fa-user-plus"></i> Thêm Nhân Viên</div>
+                        <div class="card-body">
+                            <form method="POST" id="emp-form">
+                                <input type="hidden" name="save_employee" value="1"><input type="hidden" name="user_id" id="emp-id">
+                                <div class="mb-2"><label class="fw-bold">Tên đăng nhập:</label><input type="text" name="username" id="emp-user" class="form-control" required></div>
+                                <div class="mb-2"><label class="fw-bold">Mật khẩu:</label><input type="password" name="password" id="emp-pass" class="form-control" required placeholder="Bắt buộc nhập khi tạo mới"></div>
+                                <div class="mb-3"><label class="fw-bold">Họ và Tên:</label><input type="text" name="fullname" id="emp-name" class="form-control" required></div>
+                                <button type="submit" class="btn btn-info w-100 text-white fw-bold" id="emp-save">LƯU NHÂN VIÊN</button>
+                                <button type="button" class="btn btn-secondary w-100 mt-2" onclick="resetEmpForm()" id="emp-cancel" style="display:none;">Hủy Sửa</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card shadow border-0">
+                        <div class="card-body p-0">
+                            <table class="table table-bordered mb-0">
+                                <thead class="table-light"><tr><th>Username</th><th>Họ tên</th><th>Hành động</th></tr></thead>
+                                <tbody>
+                                    {% for e in employees %}
+                                    <tr><td>{{ e.username }}</td><td>{{ e.full_name }}</td><td><button class="btn btn-sm btn-primary edit-emp-btn" data-id="{{ e.id }}" data-user="{{ e.username }}" data-name="{{ e.full_name }}"><i class="fas fa-edit"></i></button><form method="POST" class="d-inline" onsubmit="return confirm('Xóa nhân viên này?');"><input type="hidden" name="delete_employee" value="1"><input type="hidden" name="user_id" value="{{ e.id }}"><button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button></form></td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="tab-pane fade {{ 'show active' if active_tab == 'discounts' else '' }}" id="tab-discounts">
-             <div class="row"><div class="col-md-4"><div class="card shadow"><div class="card-body"><form method="POST"><input type="hidden" name="add_discount" value="1"><div class="mb-2"><input type="text" name="code" class="form-control" placeholder="Mã (VD: SALE50)" required></div><div class="mb-3"><input type="number" name="percent" class="form-control" placeholder="% Giảm" required></div><button class="btn btn-warning w-100 fw-bold">Thêm</button></form></div></div></div><div class="col-md-8"><table class="table bg-white"><thead><tr><th>Code</th><th>%</th></tr></thead><tbody>{% for d in discounts %}<tr><td>{{ d.code }}</td><td>{{ d.percentage }}%</td></tr>{% endfor %}</tbody></table></div></div>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card shadow mb-3 border-0">
+                        <div class="card-header bg-warning text-dark fw-bold" id="disc-header"><i class="fas fa-tags"></i> Thêm Mã Giảm</div>
+                        <div class="card-body">
+                            <form method="POST" id="disc-form">
+                                <input type="hidden" name="save_discount" value="1">
+                                <input type="hidden" name="discount_id" id="disc-id">
+                                <div class="mb-2"><label class="fw-bold">Mã Code:</label><input type="text" name="code" id="disc-code" class="form-control" placeholder="VD: SALE50" required></div>
+                                <div class="mb-3"><label class="fw-bold">Giảm (%):</label><input type="number" name="percent" id="disc-percent" class="form-control" placeholder="10" required></div>
+                                <button type="submit" class="btn btn-warning w-100 fw-bold" id="disc-save">LƯU MÃ</button>
+                                <button type="button" class="btn btn-secondary w-100 mt-2" onclick="resetDiscForm()" id="disc-cancel" style="display:none;">Hủy Sửa</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card shadow border-0">
+                        <div class="card-body p-0">
+                            <table class="table table-bordered mb-0 align-middle">
+                                <thead class="table-light"><tr><th>Mã Code</th><th>Giảm giá</th><th>Hành động</th></tr></thead>
+                                <tbody>
+                                    {% for d in discounts %}
+                                    <tr>
+                                        <td class="fw-bold text-primary">{{ d.code }}</td>
+                                        <td>{{ d.percentage }}%</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary edit-disc-btn" 
+                                                data-id="{{ d.id }}" 
+                                                data-code="{{ d.code }}" 
+                                                data-percent="{{ d.percentage }}">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            
+                                            <form method="POST" class="d-inline" onsubmit="return confirm('Xóa mã này?');">
+                                                <input type="hidden" name="delete_discount" value="1">
+                                                <input type="hidden" name="discount_id" value="{{ d.id }}">
+                                                <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="tab-pane fade" id="tab-bills">
-             <div class="card shadow border-0"><div class="card-header bg-dark text-white fw-bold"><i class="fas fa-history"></i> Lịch Sử Giao Dịch</div><div class="card-body p-0 table-responsive" style="max-height: 600px;"><table class="table table-striped table-hover mb-0 align-middle"><thead class="table-light"><tr><th>Mã HĐ</th><th>Thời gian</th><th>Khách hàng</th><th>Thu ngân</th><th>Chi tiết</th><th>Giảm giá</th><th>Thực thu</th></tr></thead><tbody>{% for bill in all_bills %}<tr><td>#{{ bill.id }}</td><td>{{ bill.created_at.strftime("%d/%m/%Y %H:%M") }}</td><td>{{ bill.order.customer.full_name if bill.order.customer else 'Khách vãng lai' }}</td><td>{{ bill.order.staff.full_name if bill.order.staff else 'Tự động' }}</td><td><small>{{ bill.order.details_str }}</small></td><td class="text-success">{{ "-{:,.0f}".format(bill.discount_applied) }}</td><td class="fw-bold text-danger">{{ "{:,.0f}".format(bill.final_amount) }}</td></tr>{% endfor %}</tbody></table></div></div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="editProductModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title fw-bold"><i class="fas fa-edit"></i> CẬP NHẬT SẢN PHẨM</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form method="POST" enctype="multipart/form-data" id="edit-form">
-                    <input type="hidden" name="save_product" value="1">
-                    <input type="hidden" name="product_id" id="edit-pid"> <div class="mb-2"><label class="fw-bold">Tên món:</label><input type="text" name="name" id="edit-name" class="form-control" required></div>
-                    <div class="mb-2"><label class="fw-bold">Danh mục:</label><select name="category" id="edit-cat" class="form-select"><option value="Cafe">Cafe</option><option value="Trà">Trà / Trà Sữa</option><option value="Bánh">Bánh Ngọt</option><option value="Khác">Khác</option></select></div>
-                    <div class="row">
-                        <div class="col-6 mb-2"><label class="fw-bold">Giá bán:</label><input type="number" name="price" id="edit-price" class="form-control" required></div>
-                        <div class="col-6 mb-2"><label class="fw-bold">Tồn kho:</label><input type="number" name="stock" id="edit-stock" class="form-control" required></div>
-                    </div>
-                    
-                    <div class="mb-3 p-2 bg-light rounded border">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="is_active" id="edit-active">
-                            <label class="form-check-label fw-bold text-primary" for="edit-active">Đang kinh doanh (Bật/Tắt)</label>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="fw-bold">Cập nhật Ảnh (Không bắt buộc):</label>
-                        <input type="text" name="image_url" id="edit-img-url" class="form-control mb-1" placeholder="Link ảnh mới...">
-                        <input type="file" name="image_file" class="form-control">
-                        <small class="text-muted">Để trống nếu muốn giữ ảnh cũ.</small>
-                    </div>
-
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary fw-bold py-2"><i class="fas fa-save"></i> LƯU THAY ĐỔI</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="deleteProductModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-danger text-white justify-content-center">
-                <h5 class="modal-title fw-bold">⚠️ XÓA SẢN PHẨM</h5>
-            </div>
-            <div class="modal-body text-center p-4">
-                <i class="fas fa-exclamation-triangle text-warning mb-3" style="font-size: 3rem;"></i>
-                <p>Bạn có chắc chắn muốn xóa món <b id="del-name" class="text-danger"></b> không?</p>
-                <p class="small text-muted">Hành động này không thể hoàn tác.</p>
-                
-                <form method="POST">
-                    <input type="hidden" name="delete_product" value="1">
-                    <input type="hidden" name="product_id" id="del-id">
-                    <div class="d-flex justify-content-center gap-2 mt-3">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" class="btn btn-danger fw-bold">Xóa Ngay</button>
-                    </div>
-                </form>
+            <div class="card shadow border-0">
+                <div class="card-header bg-dark text-white fw-bold"><i class="fas fa-history"></i> Lịch Sử Giao Dịch Chi Tiết</div>
+                <div class="card-body p-0 table-responsive" style="max-height: 600px;">
+                    <table class="table table-striped table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Mã HĐ</th><th>Thời gian</th><th>Khách hàng</th><th>Thu ngân</th><th>Chi tiết món</th><th>Giảm giá</th><th>Thực thu</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for bill in all_bills %}
+                            <tr>
+                                <td>#{{ bill.id }}</td>
+                                <td>{{ bill.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                                <td>{{ bill.order.customer.full_name if bill.order.customer else 'Khách vãng lai' }}</td>
+                                <td>{{ bill.order.staff.full_name if bill.order.staff else 'Tự động' }}</td>
+                                <td><small>{{ bill.order.details_str }}</small></td>
+                                <td class="text-success">{{ "-{:,.0f}".format(bill.discount_applied) }}</td>
+                                <td class="fw-bold text-danger">{{ "{:,.0f}".format(bill.final_amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -153,47 +177,27 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // KHỞI TẠO MODAL
-        var editModal = new bootstrap.Modal(document.getElementById('editProductModal'));
-        var deleteModal = new bootstrap.Modal(document.getElementById('deleteProductModal'));
-
-        // --- XỬ LÝ NÚT SỬA SẢN PHẨM ---
+        // --- LOGIC SỬA SẢN PHẨM ---
         const editBtns = document.querySelectorAll('.edit-btn');
         editBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 const data = this.dataset;
-                // Điền dữ liệu vào Modal Sửa
-                document.getElementById('edit-pid').value = data.id;
-                document.getElementById('edit-name').value = data.name;
-                document.getElementById('edit-price').value = data.price;
-                document.getElementById('edit-stock').value = data.stock;
-                document.getElementById('edit-cat').value = data.cat;
-                
-                if(!data.img.startsWith('/static')) {
-                    document.getElementById('edit-img-url').value = data.img;
-                } else {
-                    document.getElementById('edit-img-url').value = "";
-                }
-                
-                document.getElementById('edit-active').checked = (data.active === 'true');
-                
-                // Mở Modal
-                editModal.show();
+                document.getElementById('inp-pid').value = data.id;
+                document.getElementById('inp-name').value = data.name;
+                document.getElementById('inp-price').value = data.price;
+                document.getElementById('inp-stock').value = data.stock;
+                document.getElementById('inp-cat').value = data.cat;
+                document.getElementById('inp-img').value = data.img.startsWith('/static') ? "" : data.img;
+                document.getElementById('inp-active').checked = (data.active === 'true');
+                const header = document.getElementById('form-header');
+                const btnSave = document.getElementById('btn-save');
+                header.innerHTML = '<i class="fas fa-edit"></i> Cập Nhật Món'; header.className = 'card-header bg-primary text-white fw-bold';
+                btnSave.innerHTML = 'LƯU THAY ĐỔI'; btnSave.className = 'btn btn-primary w-100 fw-bold shadow-sm';
+                document.getElementById('btn-cancel').style.display = 'block';
             });
         });
 
-        // --- XỬ LÝ NÚT XÓA SẢN PHẨM ---
-        const deleteBtns = document.querySelectorAll('.delete-btn');
-        deleteBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const data = this.dataset;
-                document.getElementById('del-id').value = data.id;
-                document.getElementById('del-name').innerText = data.name;
-                deleteModal.show();
-            });
-        });
-
-        // --- XỬ LÝ SỬA NHÂN VIÊN (Giữ nguyên Logic cũ) ---
+        // --- LOGIC SỬA NHÂN VIÊN ---
         const editEmpBtns = document.querySelectorAll('.edit-emp-btn');
         editEmpBtns.forEach(btn => {
             btn.addEventListener('click', function() {
@@ -202,20 +206,43 @@
                 document.getElementById('emp-user').value = data.user;
                 document.getElementById('emp-user').readOnly = true; 
                 document.getElementById('emp-name').value = data.name;
-                
-                const passField = document.getElementById('emp-pass');
-                passField.placeholder = "Để trống nếu không đổi"; passField.required = false;
-
+                document.getElementById('emp-pass').placeholder = "Để trống nếu không đổi";
+                document.getElementById('emp-pass').required = false;
                 const header = document.getElementById('emp-header');
                 const btnSave = document.getElementById('emp-save');
-                header.innerHTML = '<i class="fas fa-user-edit"></i> Cập Nhật Nhân Viên';
-                header.className = 'card-header bg-warning text-dark fw-bold';
-                btnSave.innerHTML = 'LƯU THAY ĐỔI';
-                btnSave.className = 'btn btn-warning w-100 fw-bold';
+                header.innerHTML = '<i class="fas fa-user-edit"></i> Cập Nhật Nhân Viên'; header.className = 'card-header bg-warning text-dark fw-bold';
+                btnSave.innerHTML = 'LƯU THAY ĐỔI'; btnSave.className = 'btn btn-warning w-100 fw-bold';
                 document.getElementById('emp-cancel').style.display = 'block';
             });
         });
+
+        // --- LOGIC SỬA MÃ GIẢM GIÁ (MỚI) ---
+        const editDiscBtns = document.querySelectorAll('.edit-disc-btn');
+        editDiscBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const data = this.dataset;
+                document.getElementById('disc-id').value = data.id;
+                document.getElementById('disc-code').value = data.code;
+                document.getElementById('disc-percent').value = data.percent;
+
+                const header = document.getElementById('disc-header');
+                const btnSave = document.getElementById('disc-save');
+                header.innerHTML = '<i class="fas fa-edit"></i> Cập Nhật Mã';
+                header.className = 'card-header bg-primary text-white fw-bold';
+                btnSave.innerHTML = 'LƯU THAY ĐỔI';
+                btnSave.className = 'btn btn-primary w-100 fw-bold';
+                document.getElementById('disc-cancel').style.display = 'block';
+            });
+        });
     });
+
+    function resetForm() {
+        document.getElementById('inp-pid').value = ""; document.getElementById('product-form').reset();
+        const header = document.getElementById('form-header'); const btnSave = document.getElementById('btn-save');
+        header.innerHTML = '<i class="fas fa-plus-circle"></i> Thêm Món Mới'; header.className = 'card-header bg-success text-white fw-bold';
+        btnSave.innerHTML = 'LƯU MÓN'; btnSave.className = 'btn btn-success w-100 fw-bold shadow-sm';
+        document.getElementById('btn-cancel').style.display = 'none';
+    }
 
     function resetEmpForm() {
         document.getElementById('emp-id').value = ""; document.getElementById('emp-form').reset();
@@ -225,6 +252,15 @@
         header.innerHTML = '<i class="fas fa-user-plus"></i> Thêm Nhân Viên'; header.className = 'card-header bg-info text-white fw-bold';
         btnSave.innerHTML = 'LƯU NHÂN VIÊN'; btnSave.className = 'btn btn-info w-100 text-white fw-bold';
         document.getElementById('emp-cancel').style.display = 'none';
+    }
+
+    // RESET FORM MÃ GIẢM GIÁ (MỚI)
+    function resetDiscForm() {
+        document.getElementById('disc-id').value = ""; document.getElementById('disc-form').reset();
+        const header = document.getElementById('disc-header'); const btnSave = document.getElementById('disc-save');
+        header.innerHTML = '<i class="fas fa-tags"></i> Thêm Mã Giảm'; header.className = 'card-header bg-warning text-dark fw-bold';
+        btnSave.innerHTML = 'LƯU MÃ'; btnSave.className = 'btn btn-warning w-100 fw-bold';
+        document.getElementById('disc-cancel').style.display = 'none';
     }
 
     function toggleDateInput() {
