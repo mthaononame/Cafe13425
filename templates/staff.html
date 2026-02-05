@@ -1,27 +1,39 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
-<h2 class="text-primary fw-bold">🖥️ MÀN HÌNH NHÂN VIÊN</h2>
-<div class="card shadow">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="text-primary fw-bold m-0"><i class="fas fa-desktop"></i> MÀN HÌNH THU NGÂN</h2>
+    <button class="btn btn-info text-white fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#inventoryModal">
+        <i class="fas fa-boxes"></i> Kiểm Tra Kho
+    </button>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-primary text-white fw-bold">
+        <i class="fas fa-list-alt"></i> DANH SÁCH ĐƠN HÀNG
+    </div>
     <div class="card-body p-0">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
-                <tr><th>Giờ</th><th>Khách</th><th>Món</th><th>Tiền</th><th>TT</th><th>Xử lý</th></tr>
+                <tr><th>Giờ</th><th>Bàn</th><th>Chi tiết</th><th>Tổng tiền</th><th>Hành động</th></tr>
             </thead>
             <tbody id="order-table">
                 {% for order in orders %}
                 <tr id="order-{{ order.id }}">
-                    <td>{{ order.created_at.strftime("%H:%M") }}</td>
-                    <td>{{ order.customer_name }}</td>
-                    <td>{{ order.details }}</td>
-                    <td class="fw-bold text-danger">{{ "{:,.0f}".format(order.total_amount) }} đ</td>
-                    <td id="status-{{ order.id }}">
-                        {% if order.status == 'Pending' %} <span class="badge bg-warning text-dark">Chờ</span>
-                        {% elif order.status == 'Paying' %} <span class="badge bg-info">QR</span>
+                    <td><span class="badge bg-secondary">{{ order.created_at.strftime("%H:%M") }}</span></td>
+                    <td class="fw-bold text-primary">Bàn {{ order.customer_id }}</td>
+                    <td>{{ order.details_str | safe }}
+                        {% if order.discount_percent > 0 %}
+                            <br><small class="text-success fw-bold"><i class="fas fa-tag"></i> Đã giảm {{ order.discount_percent }}%</small>
                         {% endif %}
                     </td>
+                    <td class="fw-bold text-danger fs-5">{{ "{:,.0f}".format(order.final_total) }} đ</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary fw-bold" onclick="reqPay({{ order.id }})">Xuất Bill</button>
-                        <button class="btn btn-sm btn-success fw-bold" onclick="confPay({{ order.id }})">Đã Thu</button>
+                        <button class="btn btn-sm btn-outline-primary fw-bold me-1" onclick="openPaymentModal({{ order.id }}, {{ order.final_total }}, 'Bàn {{ order.customer_id }}')">
+                            <i class="fas fa-qrcode"></i> QR
+                        </button>
+                        <button class="btn btn-sm btn-success fw-bold" onclick="openConfirmModal({{ order.id }}, {{ order.final_total }})">
+                            <i class="fas fa-check-circle"></i> Xong
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -30,35 +42,97 @@
     </div>
 </div>
 
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold">🧾 XÁC NHẬN THANH TOÁN</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <input type="hidden" id="modal-qr-id">
+                <h6 class="text-muted text-uppercase" id="modal-qr-table">BÀN ???</h6>
+                <h1 class="text-danger fw-bold display-4 my-3" id="modal-qr-total">0</h1>
+                <p class="text-muted mb-4">Đây là số tiền khách cần thanh toán (Đã trừ khuyến mãi nếu có)</p>
+                
+                <button class="btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm" onclick="sendQrToCustomer()">
+                    <i class="fas fa-paper-plane"></i> GỬI MÃ QR
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmPayModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white justify-content-center"><h5 class="modal-title fw-bold">XÁC NHẬN</h5></div>
+            <div class="modal-body text-center p-4">
+                <div class="mb-3"><i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i></div>
+                <p class="fw-bold mb-1">Đã nhận đủ tiền?</p>
+                <h4 class="text-success fw-bold" id="confirm-amount">0 đ</h4>
+                <input type="hidden" id="confirm-id">
+            </div>
+            <div class="modal-footer justify-content-center border-0 pb-4"><button type="button" class="btn btn-light fw-bold px-4" data-bs-dismiss="modal">Hủy</button><button type="button" class="btn btn-success fw-bold px-4" onclick="processConfirm()">ĐỒNG Ý</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="inventoryModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title fw-bold">📦 TỒN KHO</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><table class="table table-striped mb-0"><thead><tr><th>Tên món</th><th class="text-end">SL</th></tr></thead><tbody>{% for p in products %}<tr><td>{{ p.name }}</td><td class="text-end fw-bold {{ 'text-danger' if p.inventory.stock_quantity < 10 else 'text-success' }}">{{ p.inventory.stock_quantity }}</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+
 <script>
-    var socket = io({transports: ['websocket', 'polling']});
+    document.addEventListener("DOMContentLoaded", function() {
+        var socket = io({transports: ['websocket', 'polling']});
+        var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+        var confirmPayModal = new bootstrap.Modal(document.getElementById('confirmPayModal'));
 
-    socket.on('update_staff_orders', function(data) {
-        let row = `
-            <tr id="order-${data.id}" class="table-warning">
-                <td>${data.time}</td><td>${data.customer}</td><td>${data.details}</td>
-                <td class="fw-bold text-danger">${parseInt(data.total).toLocaleString()} đ</td>
-                <td id="status-${data.id}"><span class="badge bg-warning text-dark">Chờ</span></td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary fw-bold" onclick="reqPay(${data.id})">Xuất Bill</button>
-                    <button class="btn btn-sm btn-success fw-bold" onclick="confPay(${data.id})">Đã Thu</button>
-                </td>
-            </tr>`;
-        document.getElementById('order-table').insertAdjacentHTML('afterbegin', row);
-    });
-
-    function reqPay(id) {
-        showConfirm("Xuất mã QR cho khách?", function() {
-            socket.emit('staff_request_payment', { order_id: id });
-            document.getElementById(`status-${id}`).innerHTML = '<span class="badge bg-info">QR</span>';
+        socket.on('update_staff_orders', function(data) {
+            let discountBadge = data.discount > 0 ? `<br><small class="text-success fw-bold"><i class="fas fa-tag"></i> Đã giảm ${data.discount}%</small>` : '';
+            
+            let row = `
+                <tr id="order-${data.id}" class="table-warning">
+                    <td><span class="badge bg-secondary">${data.time}</span></td>
+                    <td class="fw-bold text-primary">Bàn ${data.customer}</td>
+                    <td>${data.details} ${discountBadge}</td>
+                    <td class="fw-bold text-danger fs-5">${parseInt(data.total).toLocaleString()} đ</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary fw-bold me-1" onclick="openPaymentModal(${data.id}, ${data.total}, 'Bàn ${data.customer}')">
+                            <i class="fas fa-qrcode"></i> QR
+                        </button>
+                        <button class="btn btn-sm btn-success fw-bold" onclick="openConfirmModal(${data.id}, ${data.total})">
+                            <i class="fas fa-check-circle"></i> Xong
+                        </button>
+                    </td>
+                </tr>`;
+            document.getElementById('order-table').insertAdjacentHTML('afterbegin', row);
         });
-    }
 
-    function confPay(id) {
-        showConfirm("Xác nhận đã nhận tiền?", function() {
+        window.openPaymentModal = function(id, total, tableName) {
+            document.getElementById('modal-qr-id').value = id;
+            document.getElementById('modal-qr-total').innerText = parseInt(total).toLocaleString() + " đ";
+            document.getElementById('modal-qr-table').innerText = tableName;
+            paymentModal.show();
+        }
+
+        window.sendQrToCustomer = function() {
+            let id = document.getElementById('modal-qr-id').value;
+            // Gửi discount_percent = 0 vì đã tính ở bước đặt hàng rồi
+            socket.emit('staff_request_payment', { order_id: id, discount_percent: 0 });
+            paymentModal.hide();
+        }
+
+        window.openConfirmModal = function(id, amount) {
+            document.getElementById('confirm-id').value = id;
+            document.getElementById('confirm-amount').innerText = parseInt(amount).toLocaleString() + " đ";
+            confirmPayModal.show();
+        }
+
+        window.processConfirm = function() {
+            let id = document.getElementById('confirm-id').value;
             socket.emit('staff_confirm_payment', { order_id: id });
             document.getElementById(`order-${id}`).remove();
-        });
-    }
+            confirmPayModal.hide();
+        }
+    });
 </script>
 {% endblock %}
