@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'khoa_bi_mat_cua_toi_123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cafe_final_v11.db' # Version 11 Final
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cafe_final_v13.db' # Version 13
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
 
@@ -23,13 +23,15 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- MODELS (Không thay đổi cấu trúc, giữ nguyên để ổn định) ---
+# --- MODELS ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     full_name = db.Column(db.String(100))
+    email = db.Column(db.String(100), unique=True)
+    phone = db.Column(db.String(20))
     
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -60,6 +62,8 @@ class Order(db.Model):
     discount_percent = db.Column(db.Float, default=0)
     lines = db.relationship('OrderLine', backref='order', lazy=True, cascade="all, delete-orphan")
     bill = db.relationship('Bill', backref='order', uselist=False)
+    customer = db.relationship('User', foreign_keys=[customer_id])
+    staff = db.relationship('User', foreign_keys=[staff_id])
 
     @property
     def total_amount_before_discount(self): return sum(l.subtotal for l in self.lines)
@@ -101,20 +105,11 @@ def init_db():
     if not os.path.exists(app.config['UPLOAD_FOLDER']): os.makedirs(app.config['UPLOAD_FOLDER'])
     with app.app_context():
         db.create_all()
-        # Đảm bảo có Admin
-        if not User.query.filter_by(username='admin').first():
-            db.session.add(User(username='admin', password=generate_password_hash('123'), role='manager', full_name='Chủ Quán'))
-        else:
-            # Fix quyền admin nếu bị sai
-            admin = User.query.filter_by(username='admin').first()
-            if admin.role != 'manager': admin.role = 'manager'; admin.password = generate_password_hash('123')
-        
-        # Tạo Staff/Guest mẫu nếu chưa có
-        if not User.query.filter_by(username='staff').first():
-            db.session.add(User(username='staff', password=generate_password_hash('123'), role='staff', full_name='Nhân viên Mẫu'))
-        if not User.query.filter_by(username='guest').first():
-            db.session.add(User(username='guest', password=generate_password_hash('123'), role='customer', full_name='Khách'))
-        
+        admin = User.query.filter_by(username='admin').first()
+        if not admin: db.session.add(User(username='admin', password=generate_password_hash('123'), role='manager', full_name='Chủ Quán', email='admin@cafe.com'))
+        else: admin.role='manager'; admin.password=generate_password_hash('123')
+        if not User.query.filter_by(username='staff').first(): db.session.add(User(username='staff', password=generate_password_hash('123'), role='staff', full_name='Nhân viên Mẫu'))
+        if not User.query.filter_by(username='guest').first(): db.session.add(User(username='guest', password=generate_password_hash('123'), role='customer', full_name='Khách'))
         if Product.query.count() == 0:
             p1 = Product(name="Cafe Đen", price=25000, category="Cafe", image="/static/img/cafe_den.jpg")
             p1.inventory = Inventory(stock_quantity=50)
@@ -142,6 +137,26 @@ def login():
         flash('Sai thông tin!', 'danger')
     return render_template('login.html')
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        uname = request.form.get('username')
+        pwd = request.form.get('password')
+        fname = request.form.get('fullname')
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+        
+        if User.query.filter((User.username==uname) | (User.email==email)).first():
+            flash('Tên đăng nhập hoặc Email đã tồn tại!', 'danger')
+        else:
+            new_user = User(username=uname, password=generate_password_hash(pwd), 
+                            role='customer', full_name=fname, email=email, phone=phone)
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Đăng ký thành công! Vui lòng đăng nhập.', 'success')
+            return redirect(url_for('login'))
+    return render_template('register.html')
+
 @app.route('/logout')
 @login_required
 def logout(): logout_user(); return redirect(url_for('login'))
@@ -149,14 +164,12 @@ def logout(): logout_user(); return redirect(url_for('login'))
 @app.route('/customer')
 @login_required
 def customer_dashboard():
-    # Use-case 1 (View Product) & 3 (Select Product)
     products = Product.query.join(Inventory).filter(Product.is_active == True, Inventory.stock_quantity > 0).all()
     return render_template('customer.html', products=products)
 
 @app.route('/staff')
 @login_required
 def staff_dashboard():
-    # Use-case 9 (Manage Bills) & 11 (Manage Sales)
     orders = Order.query.filter(Order.status != 'Completed').order_by(Order.created_at.desc()).all()
     products = Product.query.all()
     return render_template('staff.html', orders=orders, products=products)
@@ -166,9 +179,7 @@ def staff_dashboard():
 def manager_dashboard():
     if current_user.role != 'manager': return "Access Denied"
     
-    active_tab = request.args.get('tab', 'products') # Mặc định tab sản phẩm
-
-    # Use-case 17 (View Revenue Report Period)
+    active_tab = request.args.get('tab', 'products')
     today = date.today()
     rev_day = db.session.query(func.sum(Bill.final_amount)).filter(func.date(Bill.created_at) == today).scalar() or 0
     this_month = today.strftime('%Y-%m')
@@ -176,16 +187,16 @@ def manager_dashboard():
     start_week = today - timedelta(days=today.weekday())
     rev_week = db.session.query(func.sum(Bill.final_amount)).filter(func.date(Bill.created_at) >= start_week).scalar() or 0
     filtered_revenue = 0; report_title = ""
-    
+    all_bills = Bill.query.order_by(Bill.created_at.desc()).all()
+
     if request.method == 'POST':
-        # --- Use-case 10 & 13 (Manage Products) ---
+        # 1. PRODUCT
         if 'save_product' in request.form:
             try:
                 p_id = request.form.get('product_id')
                 name = request.form['name']; price = float(request.form['price']); stock = int(request.form.get('stock', 100))
                 category = request.form['category']; is_active = True if request.form.get('is_active') else False 
                 image_path = request.form.get('image_url', '').strip()
-                
                 if not image_path and 'image_file' in request.files:
                     file = request.files['image_file']
                     if file.filename != '':
@@ -195,82 +206,87 @@ def manager_dashboard():
                 if not image_path:
                     if p_id: image_path = Product.query.get(p_id).image
                     else: image_path = "https://via.placeholder.com/150?text=No+Image"
-
-                if p_id: # Update
+                if p_id: 
                     prod = Product.query.get(p_id)
                     prod.name = name; prod.price = price; prod.category = category; 
                     prod.image = image_path; prod.is_active = is_active; prod.inventory.stock_quantity = stock
-                    flash('Cập nhật món thành công!', 'info')
-                else: # Add
+                    flash('Đã cập nhật món!', 'info')
+                else:
                     new_prod = Product(name=name, price=price, category=category, image=image_path, is_active=is_active)
                     new_prod.inventory = Inventory(stock_quantity=stock)
-                    db.session.add(new_prod)
-                    flash('Thêm món thành công!', 'success')
+                    db.session.add(new_prod); flash('Thêm món thành công!', 'success')
                 db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                flash(f"Lỗi khi lưu sản phẩm: {str(e)}", "danger")
+            except Exception as e: db.session.rollback(); flash(str(e), "danger")
             return redirect(url_for('manager_dashboard', tab='products'))
             
         elif 'delete_product' in request.form:
-            Product.query.filter_by(id=request.form.get('product_id')).delete()
-            db.session.commit()
+            Product.query.filter_by(id=request.form.get('product_id')).delete(); db.session.commit()
             return redirect(url_for('manager_dashboard', tab='products'))
 
-        # --- Use-case 18 (Employee Manage) FIX CRASH HERE ---
+        # 2. EMPLOYEE
         elif 'save_employee' in request.form:
              try:
                  u_id = request.form.get('user_id')
                  uname = request.form['username']
                  fname = request.form['fullname']
                  pwd = request.form.get('password', '').strip()
-                 
-                 if u_id: # UPDATE NHÂN VIÊN (Use-case 18 Update)
+                 if u_id:
                      user = User.query.get(u_id)
                      if user:
-                         user.username = uname
-                         user.full_name = fname
+                         user.username = uname; user.full_name = fname
                          if pwd: user.password = generate_password_hash(pwd)
-                         db.session.commit()
-                         flash('Đã cập nhật thông tin nhân viên!', 'info')
-                 else: # ADD NEW NHÂN VIÊN (Use-case 18 Add)
-                     # Kiểm tra trùng tên đăng nhập
-                     if User.query.filter_by(username=uname).first():
-                         flash(f'Lỗi: Tên đăng nhập "{uname}" đã tồn tại!', 'danger')
+                         db.session.commit(); flash('Đã cập nhật NV!', 'info')
+                 else:
+                     if User.query.filter_by(username=uname).first(): flash('Username tồn tại!', 'warning')
                      else:
-                         new_user = User(username=uname, password=generate_password_hash(pwd), full_name=fname, role='staff')
-                         db.session.add(new_user)
-                         db.session.commit()
-                         flash(f'Đã tạo tài khoản cho nhân viên {fname}!', 'success')
-             except Exception as e:
-                 db.session.rollback()
-                 flash(f"Lỗi hệ thống: {str(e)}", "danger")
-                 print(f"Error saving employee: {e}")
-             
+                         db.session.add(User(username=uname, password=generate_password_hash(pwd), full_name=fname, role='staff'))
+                         db.session.commit(); flash('Thêm NV thành công!', 'success')
+             except Exception as e: db.session.rollback(); flash("Lỗi hệ thống", "danger")
              return redirect(url_for('manager_dashboard', tab='employees'))
 
-        elif 'delete_employee' in request.form: # Use-case 18 Delete
-            try:
-                User.query.filter_by(id=request.form.get('user_id')).delete()
-                db.session.commit()
-                flash("Đã xóa nhân viên.", "success")
-            except Exception as e:
-                flash("Lỗi khi xóa nhân viên.", "danger")
+        elif 'delete_employee' in request.form:
+            User.query.filter_by(id=request.form.get('user_id')).delete(); db.session.commit()
             return redirect(url_for('manager_dashboard', tab='employees'))
 
-        elif 'add_discount' in request.form:
-             if not DiscountCode.query.filter_by(code=request.form['code'].upper()).first():
-                 db.session.add(DiscountCode(code=request.form['code'].upper(), percentage=float(request.form['percent'])))
-                 db.session.commit()
+        # 3. DISCOUNT (NÂNG CẤP: THÊM + SỬA)
+        elif 'save_discount' in request.form:
+             try:
+                 d_id = request.form.get('discount_id')
+                 code = request.form['code'].strip().upper()
+                 percent = float(request.form['percent'])
+                 
+                 if d_id: # Update
+                     disc = DiscountCode.query.get(d_id)
+                     if disc:
+                         disc.code = code
+                         disc.percentage = percent
+                         db.session.commit()
+                         flash('Cập nhật mã giảm giá thành công!', 'info')
+                 else: # Add New
+                     if DiscountCode.query.filter_by(code=code).first():
+                         flash('Mã này đã tồn tại!', 'warning')
+                     else:
+                         db.session.add(DiscountCode(code=code, percentage=percent))
+                         db.session.commit()
+                         flash('Thêm mã giảm giá thành công!', 'success')
+             except Exception as e: db.session.rollback(); flash(f"Lỗi: {str(e)}", "danger")
              return redirect(url_for('manager_dashboard', tab='discounts'))
+
+        # 4. XÓA MÃ GIẢM GIÁ (MỚI)
+        elif 'delete_discount' in request.form:
+            try:
+                DiscountCode.query.filter_by(id=request.form.get('discount_id')).delete()
+                db.session.commit()
+                flash('Đã xóa mã giảm giá!', 'success')
+            except: flash('Lỗi khi xóa!', 'danger')
+            return redirect(url_for('manager_dashboard', tab='discounts'))
 
         elif 'filter_report' in request.form:
             filter_type = request.form.get('filter_type'); date_val = request.form.get('date_val'); query = Bill.query
             if filter_type == 'day' and date_val: query = query.filter(func.date(Bill.created_at) == date_val)
             elif filter_type == 'month' and date_val: query = query.filter(func.strftime('%Y-%m', Bill.created_at) == date_val)
             elif filter_type == 'year' and date_val: query = query.filter(func.strftime('%Y', Bill.created_at) == date_val)
-            bills = query.all()
-            filtered_revenue = sum(b.final_amount for b in bills)
+            bills = query.all(); all_bills = bills; filtered_revenue = sum(b.final_amount for b in bills)
 
     products = Product.query.all()
     employees = User.query.filter_by(role='staff').all()
@@ -279,9 +295,9 @@ def manager_dashboard():
     return render_template('manager.html', products=products, employees=employees, 
                            discounts=discounts, active_tab=active_tab,
                            rev_day=rev_day, rev_week=rev_week, rev_month=rev_month,
-                           filtered_revenue=filtered_revenue, report_title=report_title)
+                           filtered_revenue=filtered_revenue, report_title=report_title, all_bills=all_bills)
 
-# --- SOCKET EVENTS (Use-case 3, 4, 5, 6, 7, 8) ---
+# --- SOCKET EVENTS ---
 @socketio.on('check_discount_code')
 def handle_check_discount(data):
     code_input = data.get('code', '').strip().upper()
@@ -291,7 +307,6 @@ def handle_check_discount(data):
 
 @socketio.on('new_order_request')
 def handle_new_order(data):
-    # Use-case 3, 4, 5 (Select, Quantity, Customize)
     try:
         discount_percent = data.get('discount_percent', 0)
         new_order = Order(customer_id=current_user.id, status='Pending', discount_percent=discount_percent)
@@ -299,9 +314,8 @@ def handle_new_order(data):
         items_details = []; total_price = 0
         for item in data['cart']:
             product = Product.query.get(item['id'])
-            # Use-case 4.3: Check Stock
             if product and product.inventory.stock_quantity >= item['qty']:
-                product.inventory.stock_quantity -= item['qty'] # Use-case 15 Auto Update
+                product.inventory.stock_quantity -= item['qty']
                 cust_text = item.get('options', '')
                 line = OrderLine(order_id=new_order.id, product_id=product.id, product_name=product.name, quantity=item['qty'], price_at_time=product.price, customization=cust_text)
                 db.session.add(line); items_details.append(f"{product.name} x{item['qty']}"); total_price += (product.price * item['qty'])
@@ -313,7 +327,6 @@ def handle_new_order(data):
 
 @socketio.on('staff_request_payment')
 def handle_payment(data):
-    # Use-case 7 (Issue Bill)
     order = Order.query.get(data['order_id'])
     if order:
         order.status = 'Paying'; raw_total = order.total_amount_before_discount
@@ -326,7 +339,6 @@ def handle_payment(data):
 
 @socketio.on('staff_confirm_payment')
 def handle_confirm(data):
-    # Use-case 6 (Make Payment)
     order = Order.query.get(data['order_id'])
     if order and order.bill:
         order.status = 'Completed'; order.staff_id = current_user.id
